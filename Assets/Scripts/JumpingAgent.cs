@@ -1,75 +1,72 @@
+using UnityEngine;
 using Unity.MLAgents;
 using Unity.MLAgents.Actuators;
 using Unity.MLAgents.Sensors;
-using UnityEngine;
 
-public class JumpingAgent : Agent
+public class CubeJumpAgent : Agent
 {
-    public float Force = 15f;
-    private Rigidbody rb;
-    public float obstacleCheckDistance = 1f; // Distance at which the agent detects obstacles
-    public LayerMask obstacleLayerMask; // Layer for obstacle detection
+    public float jumpForce = 10f; // The force applied to make the cube jump
+    private float jumpPenalty = -0.1f; // Penalty for jumping when not necessary
+    private Rigidbody cubeRigidbody;
+    private bool isGrounded;
+    private float survivalReward = 0.01f; // Reward for each timestep the agent survives
+    private float successfulPassReward = 1.0f; // Reward for successfully passing an obstacle
+    private float hitObstaclePenalty = -1.0f; // Penalty for hitting an obstacle
+    public Spawner spawner;
 
+    // Initialize agent properties and components
     public override void Initialize()
     {
-        rb = GetComponent<Rigidbody>();
-        rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ; // Freeze rotation around X and Z axes
-        Debug.Log("Agent initialized with Force: " + Force);
+        cubeRigidbody = GetComponent<Rigidbody>();
     }
 
-    public override void OnActionReceived(ActionBuffers actionBuffers)
-    {
-        // If the action is greater than 0.5, it indicates a jump
-        if (actionBuffers.ContinuousActions[0] > 0.5f && IsGrounded() && ShouldJump())
-        {
-            Thrust();
-        }
-    }
-
+    // Reset the agent at the start of each episode
     public override void OnEpisodeBegin()
     {
-        this.transform.localPosition = new Vector3(0, 0.5f, 0);
-        this.transform.localRotation = Quaternion.identity;
-        Debug.Log("Episode started: Agent reset.");
+        cubeRigidbody.velocity = Vector3.zero;
+        cubeRigidbody.angularVelocity = Vector3.zero;
+        transform.localPosition = new Vector3(5, -6.472911f, -1.685753f);
+        transform.localRotation = Quaternion.identity;
+        isGrounded = true;
     }
 
-    private void Thrust()
+    // Handle actions from the neural network
+    public override void OnActionReceived(ActionBuffers actions)
     {
-        rb.AddForce(Vector3.up * Force, ForceMode.Impulse);
-        Debug.Log("Applied thrust to jump.");
-    }
+        AddReward(survivalReward); // Reward for surviving each timestep
 
-    private bool IsGrounded()
-    {
-        float rayLength = 0.55f;
-        RaycastHit hit;
-        if (Physics.Raycast(transform.position, Vector3.down, out hit, rayLength))
+        if (actions.ContinuousActions[0] > 0.5f && isGrounded)
         {
-            return hit.collider.CompareTag("Ground");
+            cubeRigidbody.AddForce(Vector3.up * jumpForce, ForceMode.VelocityChange);
+            isGrounded = false;
+            AddReward(jumpPenalty); // Penalty for jumping unnecessarily
         }
-        return false;
     }
 
-    private bool ShouldJump()
+    // Detect collisions with objects
+    private void OnCollisionEnter(Collision collision)
     {
-        // Check if there's an obstacle in front within the defined distance
-        RaycastHit hit;
-        if (Physics.Raycast(transform.position, Vector3.forward, out hit, obstacleCheckDistance, obstacleLayerMask))
+        if (collision.gameObject.CompareTag("Ground"))
         {
-            return true;
+            isGrounded = true;
         }
-        return false;
+        else if (collision.gameObject.CompareTag("Avoid"))
+        {
+            AddReward(hitObstaclePenalty); // Large penalty for hitting an obstacle
+            spawner.ResetSpawner(); // Reset the spawner
+            EndEpisode(); // End the episode due to collision with an obstacle
+        }
+        else if (collision.gameObject.CompareTag("WallReward"))
+        {
+            AddReward(successfulPassReward); // Reward for successfully passing an obstacle
+            // Episode continues to allow multiple obstacle passes
+        }
     }
-
+    // Implement manual control for debugging purposes
     public override void Heuristic(in ActionBuffers actionsOut)
     {
         var continuousActionsOut = actionsOut.ContinuousActions;
-        continuousActionsOut.Clear();
-
-        if (Input.GetKey(KeyCode.UpArrow) && IsGrounded() && ShouldJump())
-        {
-            continuousActionsOut[0] = 1; // Request a jump action
-            Debug.Log("Jump requested through heuristic.");
-        }
+        continuousActionsOut[0] = Input.GetKey(KeyCode.Space) ? 1.0f : 0.0f;
     }
+    // Observations can be added from a Ray Perception Sensor 3D component if necessary
 }
