@@ -1,16 +1,8 @@
 using UnityEngine;
 
-public class MoveForward : MonoBehaviour
+public class CoinMoveForward : MonoBehaviour
 {
-    public float minSpeed = 10f; // Minimum speed
-    public float maxSpeed = 40f; // Maximum speed
-    private float speed; // Speed of movement
-
-    void Start()
-    {
-        // Set a random speed between minSpeed and maxSpeed when the object is spawned
-        speed = Random.Range(minSpeed, maxSpeed);
-    }
+    public float speed = 5f; // Speed of movement
 
     void Update()
     {
@@ -28,4 +20,5 @@ public class MoveForward : MonoBehaviour
             Destroy(gameObject);
         }
     }
+
 }
